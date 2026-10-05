@@ -33,7 +33,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define OV7670_I2C_ADDRESS 0x42 // 8-бітна адреса OV7670
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -63,12 +63,16 @@ ETH_TxPacketConfig TxConfig;
 
 ADC_HandleTypeDef hadc1;
 
+DCMI_HandleTypeDef hdcmi;
+DMA_HandleTypeDef hdma_dcmi;
+
 ETH_HandleTypeDef heth;
 
 I2C_HandleTypeDef hi2c1;
 
 SPI_HandleTypeDef hspi2;
 
+TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart2;
@@ -84,6 +88,7 @@ PCD_HandleTypeDef hpcd_USB_OTG_FS;
 void SystemClock_Config(void);
 static void MPU_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_ETH_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_SPI2_Init(void);
@@ -92,6 +97,8 @@ static void MX_USART3_UART_Init(void);
 static void MX_USB_OTG_FS_PCD_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM3_Init(void);
+static void MX_DCMI_Init(void);
+static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -113,7 +120,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+  HAL_StatusTypeDef status;
   /* USER CODE END 1 */
 
   /* MPU Configuration--------------------------------------------------------*/
@@ -137,6 +144,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_ETH_Init();
   MX_I2C1_Init();
   MX_SPI2_Init();
@@ -145,20 +153,32 @@ int main(void)
   MX_USB_OTG_FS_PCD_Init();
   MX_ADC1_Init();
   MX_TIM3_Init();
+  MX_DCMI_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
   printf("hello from STM32\r\n");
+
+  // Запуск генерації 24 МГц XCLK для OV7670 на CH1 TIM2
+  status = HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+  printf("OV7670 clock status: %d\r\n", status);
+
+  // Перевіряємо наявність камери на I2C
+  if (HAL_I2C_IsDeviceReady(&hi2c1, OV7670_I2C_ADDRESS, 3, 100) == HAL_OK) {
+    printf("OV7670 camera detected successfully\r\n");
+  } else {
+    printf("ERROR: OV7670 camera not found\r\n");
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    /* USER CODE END WHILE */
-
     HAL_Delay(1000);
     HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
     printf("tick %lu\r\n", HAL_GetTick());
+    /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
   }
@@ -271,6 +291,43 @@ static void MX_ADC1_Init(void)
   /* USER CODE BEGIN ADC1_Init 2 */
 
   /* USER CODE END ADC1_Init 2 */
+
+}
+
+/**
+  * @brief DCMI Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_DCMI_Init(void)
+{
+
+  /* USER CODE BEGIN DCMI_Init 0 */
+
+  /* USER CODE END DCMI_Init 0 */
+
+  /* USER CODE BEGIN DCMI_Init 1 */
+
+  /* USER CODE END DCMI_Init 1 */
+  hdcmi.Instance = DCMI;
+  hdcmi.Init.SynchroMode = DCMI_SYNCHRO_HARDWARE;
+  hdcmi.Init.PCKPolarity = DCMI_PCKPOLARITY_FALLING;
+  hdcmi.Init.VSPolarity = DCMI_VSPOLARITY_HIGH;
+  hdcmi.Init.HSPolarity = DCMI_HSPOLARITY_LOW;
+  hdcmi.Init.CaptureRate = DCMI_CR_ALL_FRAME;
+  hdcmi.Init.ExtendedDataMode = DCMI_EXTEND_DATA_8B;
+  hdcmi.Init.JPEGMode = DCMI_JPEG_DISABLE;
+  hdcmi.Init.ByteSelectMode = DCMI_BSM_ALL;
+  hdcmi.Init.ByteSelectStart = DCMI_OEBS_ODD;
+  hdcmi.Init.LineSelectMode = DCMI_LSM_ALL;
+  hdcmi.Init.LineSelectStart = DCMI_OELS_ODD;
+  if (HAL_DCMI_Init(&hdcmi) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN DCMI_Init 2 */
+
+  /* USER CODE END DCMI_Init 2 */
 
 }
 
@@ -408,6 +465,65 @@ static void MX_SPI2_Init(void)
   /* USER CODE BEGIN SPI2_Init 2 */
 
   /* USER CODE END SPI2_Init 2 */
+
+}
+
+/**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 0;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 3;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 2;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+  HAL_TIM_MspPostInit(&htim2);
 
 }
 
@@ -566,6 +682,22 @@ static void MX_USB_OTG_FS_PCD_Init(void)
 }
 
 /**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA2_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA2_Stream1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream1_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -578,6 +710,7 @@ static void MX_GPIO_Init(void)
   /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
@@ -589,7 +722,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOB, LD1_Pin|LD3_Pin|LD2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(USB_PowerSwitchOn_GPIO_Port, USB_PowerSwitchOn_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOG, GPIO_PIN_6, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : USER_Btn_Pin */
   GPIO_InitStruct.Pin = USER_Btn_Pin;
@@ -604,12 +737,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : USB_PowerSwitchOn_Pin */
-  GPIO_InitStruct.Pin = USB_PowerSwitchOn_Pin;
+  /*Configure GPIO pin : PG6 */
+  GPIO_InitStruct.Pin = GPIO_PIN_6;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(USB_PowerSwitchOn_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
 
   /*Configure GPIO pin : USB_OverCurrent_Pin */
   GPIO_InitStruct.Pin = USB_OverCurrent_Pin;
